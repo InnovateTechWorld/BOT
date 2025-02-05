@@ -10,10 +10,16 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { formatModelResponse } from "@/lib/TextFormatting";
 
+interface Message {
+  text: string;
+  isUser: boolean;
+  pdfName?: string;
+}
+
 interface Conversation {
   id: string;
   title: string;
-  messages: Array<{ text: string; isUser: boolean }>;
+  messages: Array<Message>;
 }
 
 interface BusinessFields {
@@ -28,7 +34,7 @@ const Index = () => {
   const [message, setMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
-  const [messages, setMessages] = useState<Array<{ text: string; isUser: boolean }>>([]);
+  const [messages, setMessages] = useState<Array<Message>>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [showForm, setShowForm] = useState(true);
@@ -76,7 +82,16 @@ const Index = () => {
 
     setPdfName(file.name);
     setPdfUploaded(true);
-    setMessage("I've uploaded a PDF. Would you like me to summarize it or ask specific questions about it?");
+    
+    // Add a message to show the PDF was uploaded
+    const newMessage = {
+      text: "PDF uploaded",
+      isUser: true,
+      pdfName: file.name
+    };
+    setMessages([...messages, newMessage]);
+    saveConversation([...messages, newMessage]);
+    setMessage("Summarize it");
   };
 
   const saveConversation = (messages: Array<{ text: string; isUser: boolean }>) => {
@@ -91,11 +106,13 @@ const Index = () => {
       };
       localStorage.setItem("conversations", JSON.stringify([newConversation, ...conversations]));
       setCurrentConversationId(newConversation.id);
+      window.dispatchEvent(new Event('conversationsUpdated'));
     } else {
       const updatedConversations = conversations.map((conv: Conversation) =>
         conv.id === currentConversationId ? { ...conv, messages } : conv
       );
       localStorage.setItem("conversations", JSON.stringify(updatedConversations));
+      window.dispatchEvent(new Event('conversationsUpdated'));
     }
   };
 
@@ -131,7 +148,12 @@ const Index = () => {
   const handleSendMessage = async () => {
     if (!message.trim()) return;
 
-    const newMessages = [...messages, { text: message, isUser: true }];
+    const newMessage = {
+      text: message,
+      isUser: true,
+      ...(pdfUploaded ? { pdfName } : {})
+    };
+    const newMessages = [...messages, newMessage];
     setMessages(newMessages);
     setShowSuggestions(false);
     setMessage("");
@@ -309,6 +331,13 @@ const Index = () => {
               </div>
             ) : (
               <>
+                {pdfUploaded && (
+                  <div className="mb-4 p-3 bg-muted rounded-lg flex items-center gap-2">
+                    <FileUp className="w-5 h-5" />
+                    <span>{pdfName}</span>
+                  </div>
+                )}
+                
                 {messages.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center">
                     <h1 className="text-4xl font-bold mb-8 animate-fade-in text-[#0f172a]">
@@ -317,6 +346,17 @@ const Index = () => {
                   </div>
                 ) : (
                   <div className="flex-1 space-y-4 mb-6 overflow-y-auto">
+                    {(message || pdfUploaded) && (
+                      <div className="p-4 rounded-lg bg-[#0f172a] text-white w-fit ml-auto animate-fade-in opacity-50">
+                        {pdfUploaded && (
+                          <div className="text-xs text-muted-foreground mb-1">
+                            <FileUp className="w-3 h-3 inline mr-1" />
+                            {pdfName}
+                          </div>
+                        )}
+                        {message}
+                      </div>
+                    )}
                     {messages.map((msg, index) => (
                       <div
                         key={index}
@@ -327,15 +367,23 @@ const Index = () => {
                             : "bg-muted w-fit"
                         )}
                       >
-                        {msg.isUser ? (
-                          msg.text
-                        ) : (
-                          <div
-                            dangerouslySetInnerHTML={{
-                              __html: formatModelResponse(msg.text),
-                            }}
-                          />
-                        )}
+                        <div>
+                          {msg.pdfName && (
+                            <div className="text-xs text-muted-foreground mb-1">
+                              <FileUp className="w-3 h-3 inline mr-1" />
+                              {msg.pdfName}
+                            </div>
+                          )}
+                          {msg.isUser ? (
+                            msg.text
+                          ) : (
+                            <div
+                              dangerouslySetInnerHTML={{
+                                __html: formatModelResponse(msg.text),
+                              }}
+                            />
+                          )}
+                        </div>
                       </div>
                     ))}
                     {isTyping && (
@@ -380,20 +428,32 @@ const Index = () => {
                     </Button>
                   </div>
 
-                  {pdfUploaded && (
-                    <div className="text-sm text-muted-foreground">
-                      PDF uploaded: {pdfName}
-                    </div>
-                  )}
-
                   {showSuggestions && (
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 animate-fade-in">
-                      <ActionButton label="Analyze my Market" />
-                      <ActionButton label="Review Business Plan" />
-                      <ActionButton label="Financial Insights" />
-                      <ActionButton label="Risk Assessment" />
-                      <ActionButton label="Growth Strategy" />
-                      <ActionButton label="Competitor Analysis" />
+                      <ActionButton
+                        label="Analyze my Market"
+                        onClick={(text) => setMessage(message => message ? `${message} ${text}` : text)}
+                      />
+                      <ActionButton
+                        label="Review Business Plan"
+                        onClick={(text) => setMessage(message => message ? `${message} ${text}` : text)}
+                      />
+                      <ActionButton
+                        label="Financial Insights"
+                        onClick={(text) => setMessage(message => message ? `${message} ${text}` : text)}
+                      />
+                      <ActionButton
+                        label="Risk Assessment"
+                        onClick={(text) => setMessage(message => message ? `${message} ${text}` : text)}
+                      />
+                      <ActionButton
+                        label="Growth Strategy"
+                        onClick={(text) => setMessage(message => message ? `${message} ${text}` : text)}
+                      />
+                      <ActionButton
+                        label="Competitor Analysis"
+                        onClick={(text) => setMessage(message => message ? `${message} ${text}` : text)}
+                      />
                     </div>
                   )}
                 </div>

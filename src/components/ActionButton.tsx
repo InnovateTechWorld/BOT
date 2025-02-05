@@ -4,7 +4,7 @@ import { LucideIcon } from "lucide-react";
 interface ActionButtonProps {
   icon?: LucideIcon;
   label: string;
-  onClick?: () => void;
+  onClick?: (label: string) => void;
 }
 
 export function ActionButton({ icon: Icon, label, onClick }: ActionButtonProps) {
@@ -12,7 +12,7 @@ export function ActionButton({ icon: Icon, label, onClick }: ActionButtonProps) 
     <Button
       variant="outline"
       className="hover-scale flex items-center gap-2 h-10 px-4 py-2"
-      onClick={onClick}
+      onClick={() => onClick?.(label)}
     >
       {Icon && <Icon className="w-4 h-4" />}
       <span>{label}</span>

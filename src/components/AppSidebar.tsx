@@ -33,10 +33,34 @@ export function AppSidebar({ onConversationSelect, onNewConversation }: AppSideb
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
   useEffect(() => {
-    const savedConversations = localStorage.getItem("conversations");
-    if (savedConversations) {
-      setConversations(JSON.parse(savedConversations));
-    }
+    // Initial load of conversations
+    const loadConversations = () => {
+      const savedConversations = localStorage.getItem("conversations");
+      if (savedConversations) {
+        setConversations(JSON.parse(savedConversations));
+      }
+    };
+
+    loadConversations();
+
+    // Listen for storage changes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "conversations") {
+        loadConversations();
+      }
+    };
+
+    // Listen for storage events
+    window.addEventListener("storage", handleStorageChange);
+
+    // Custom event for immediate updates within the same window
+    const handleLocalUpdate = () => loadConversations();
+    window.addEventListener("conversationsUpdated", handleLocalUpdate);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("conversationsUpdated", handleLocalUpdate);
+    };
   }, []);
 
   const toggleGroup = () => {
@@ -74,7 +98,7 @@ export function AppSidebar({ onConversationSelect, onNewConversation }: AppSideb
             />
           </SidebarGroupLabel>
           {isExpanded && (
-            <SidebarGroupContent className="animate-accordion-down">
+            <SidebarGroupContent className="animate-accordion-down overflow-y-auto max-h-[calc(100vh-150px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
               <SidebarMenu>
                 {conversations.map((conv) => (
                   <SidebarMenuItem key={conv.id}>
