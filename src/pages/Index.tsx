@@ -1,13 +1,14 @@
-import { Globe, Lightbulb, Send } from "lucide-react";
+import { Globe, Lightbulb, Send, Bot, User, Edit2, FileUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ActionButton } from "@/components/ActionButton";
 import { UserAvatar } from "@/components/UserAvatar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
+import { formatModelResponse } from "@/lib/TextFormatting";
 
 interface Conversation {
   id: string;
@@ -15,26 +16,72 @@ interface Conversation {
   messages: Array<{ text: string; isUser: boolean }>;
 }
 
+interface BusinessFields {
+  product: string;
+  targetCustomer: string;
+  geographicMarket: string;
+  pricingStrategy: string;
+  mainChannels: string;
+}
+
 const Index = () => {
   const [message, setMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
-  const [messages, setMessages] = useState<
-    Array<{ text: string; isUser: boolean }>
-  >([]);
-  const [currentConversationId, setCurrentConversationId] = useState<
-    string | null
-  >(null);
+  const [messages, setMessages] = useState<Array<{ text: string; isUser: boolean }>>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [formSubmitted, setFormSubmitted] = useState(false);
+  const [showForm, setShowForm] = useState(true);
+  const [pdfUploaded, setPdfUploaded] = useState(false);
+  const [pdfName, setPdfName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [businessFields, setBusinessFields] = useState<BusinessFields>({
+    product: "",
+    targetCustomer: "",
+    geographicMarket: "",
+    pricingStrategy: "",
+    mainChannels: "",
+  });
   const { toast } = useToast();
 
-  const saveConversation = (
-    messages: Array<{ text: string; isUser: boolean }>
-  ) => {
-    const conversations = JSON.parse(
-      localStorage.getItem("conversations") || "[]"
-    );
-    const firstUserMessage =
-      messages.find((m) => m.isUser)?.text || "New Conversation";
+  useEffect(() => {
+    // Load business fields from localStorage
+    const storedFields = localStorage.getItem("businessFields");
+    if (storedFields) {
+      setBusinessFields(JSON.parse(storedFields));
+      setFormSubmitted(true);
+      setShowForm(false);
+    }
+
+    // Load the last conversation
+    const conversations = JSON.parse(localStorage.getItem("conversations") || "[]");
+    if (conversations.length > 0) {
+      const lastConversation = conversations[0];
+      setMessages(lastConversation.messages);
+      setCurrentConversationId(lastConversation.id);
+      setShowSuggestions(false);
+    }
+  }, []);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
+      toast({
+        title: "Invalid File",
+        description: "Please upload a PDF file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPdfName(file.name);
+    setPdfUploaded(true);
+    setMessage("I've uploaded a PDF. Would you like me to summarize it or ask specific questions about it?");
+  };
+
+  const saveConversation = (messages: Array<{ text: string; isUser: boolean }>) => {
+    const conversations = JSON.parse(localStorage.getItem("conversations") || "[]");
+    const firstUserMessage = messages.find((m) => m.isUser)?.text || "New Conversation";
 
     if (!currentConversationId) {
       const newConversation: Conversation = {
@@ -42,19 +89,13 @@ const Index = () => {
         title: firstUserMessage,
         messages,
       };
-      localStorage.setItem(
-        "conversations",
-        JSON.stringify([newConversation, ...conversations])
-      );
+      localStorage.setItem("conversations", JSON.stringify([newConversation, ...conversations]));
       setCurrentConversationId(newConversation.id);
     } else {
       const updatedConversations = conversations.map((conv: Conversation) =>
         conv.id === currentConversationId ? { ...conv, messages } : conv
       );
-      localStorage.setItem(
-        "conversations",
-        JSON.stringify(updatedConversations)
-      );
+      localStorage.setItem("conversations", JSON.stringify(updatedConversations));
     }
   };
 
@@ -62,39 +103,116 @@ const Index = () => {
     setMessages([]);
     setCurrentConversationId(null);
     setShowSuggestions(true);
+    setPdfUploaded(false);
+    setPdfName("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
     toast({
       title: "New Conversation Started",
       description: "You can now start a new chat.",
     });
   };
 
-  const handleSendMessage = () => {
+  const handleSubmitBusinessFields = () => {
+    localStorage.setItem("businessFields", JSON.stringify(businessFields));
+    setFormSubmitted(true);
+    setShowForm(false);
+    toast({
+      title: "Business Details Saved",
+      description: "Your business information has been saved successfully.",
+    });
+  };
+
+  const handleEditBusinessFields = () => {
+    setShowForm(true);
+  };
+
+  const handleSendMessage = async () => {
     if (!message.trim()) return;
 
     const newMessages = [...messages, { text: message, isUser: true }];
     setMessages(newMessages);
     setShowSuggestions(false);
     setMessage("");
-
     setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
+
+    try {
+      let fileContent = null;
+      if (fileInputRef.current?.files?.[0]) {
+        const file = fileInputRef.current.files[0];
+        const reader = new FileReader();
+        fileContent = await new Promise((resolve) => {
+          reader.onload = () => {
+            const base64Content = reader.result?.toString().split(',')[1];
+            resolve(base64Content);
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      const response = await fetch("https://bizi-rgdl.onrender.com/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: message,
+          history: messages.map(msg => ({
+            role: msg.isUser ? "user" : "model",
+            text: msg.text
+          })),
+          fileContent,
+          ...businessFields
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
       const updatedMessages = [
         ...newMessages,
-        {
-          text: "This is a sample response. In a real application, this would be the AI's response.",
-          isUser: false,
-        },
+        { text: data.response, isUser: false },
       ];
       setMessages(updatedMessages);
       saveConversation(updatedMessages);
-    }, 2000);
+
+      // Clear PDF state after sending
+      if (fileContent) {
+        setPdfUploaded(false);
+        setPdfName("");
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    } catch (error) {
+      const errorMessage = { 
+        text: "Sorry, I'm having trouble connecting to the server. Please try again later.", 
+        isUser: false 
+      };
+      setMessages([...newMessages, errorMessage]);
+      saveConversation([...newMessages, errorMessage]);
+      toast({
+        title: "Error",
+        description: "Failed to connect to the AI service.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   const handleConversationSelect = (conversation: Conversation) => {
     setMessages(conversation.messages);
     setCurrentConversationId(conversation.id);
     setShowSuggestions(false);
+    setPdfUploaded(false);
+    setPdfName("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
     toast({
       title: "Conversation loaded",
       description: "You can now continue your conversation.",
@@ -115,71 +233,172 @@ const Index = () => {
           onNewConversation={handleNewConversation}
         />
         <main className="flex-1 p-6 flex flex-col">
-          <div className="flex justify-end mb-6">
+          <div className="flex justify-between mb-6">
             <UserAvatar />
+            {formSubmitted && !showForm && (
+              <Button
+                onClick={handleEditBusinessFields}
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <Edit2 className="w-4 h-4" />
+                Edit Business Details
+              </Button>
+            )}
           </div>
 
           <div className="flex-1 flex flex-col">
-            {messages.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center">
-                <h1 className="text-4xl font-bold mb-8 animate-fade-in text-[#0f172a]">
-                  What can I help with?
-                </h1>
-              </div>
-            ) : (
-              <div className="flex-1 space-y-4 mb-6">
-                {messages.map((msg, index) => (
-                  <div
-                    key={index}
-                    className={cn(
-                      "p-4 rounded-lg max-w-[80%] animate-fade-in",
-                      msg.isUser
-                        ? "ml-auto bg-[#0f172a] text-white w-fit animate-slide-in-right"
-                        : "bg-muted w-fit"
-                    )}
-                  >
-                    {msg.text}
+            {showForm ? (
+              <div className="mb-6 space-y-4">
+                <h3 className="text-xl font-semibold">Tell us about your business</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Product or service</label>
+                    <Input
+                      value={businessFields.product}
+                      onChange={(e) =>
+                        setBusinessFields({ ...businessFields, product: e.target.value })
+                      }
+                      placeholder="What do you offer?"
+                    />
                   </div>
-                ))}
-                {isTyping && (
-                  <div className="typing-animation p-4 rounded-lg bg-muted inline-block">
-                    <span></span>
-                    <span></span>
-                    <span></span>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Target customer</label>
+                    <Input
+                      value={businessFields.targetCustomer}
+                      onChange={(e) =>
+                        setBusinessFields({ ...businessFields, targetCustomer: e.target.value })
+                      }
+                      placeholder="Who are your customers?"
+                    />
                   </div>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-6">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Message B.O.T"
-                  className="w-full h-12 text-lg outline-none ring-0"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                />
-                <Button
-                  onClick={handleSendMessage}
-                  className="h-12 px-4 bg-[#0f172a] text-white"
-                  disabled={!message.trim()}
-                >
-                  <Send className="w-5 h-5" />
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Geographic market</label>
+                    <Input
+                      value={businessFields.geographicMarket}
+                      onChange={(e) =>
+                        setBusinessFields({ ...businessFields, geographicMarket: e.target.value })
+                      }
+                      placeholder="Where do you operate?"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Pricing strategy</label>
+                    <Input
+                      value={businessFields.pricingStrategy}
+                      onChange={(e) =>
+                        setBusinessFields({ ...businessFields, pricingStrategy: e.target.value })
+                      }
+                      placeholder="How do you price your offerings?"
+                    />
+                  </div>
+                  <div className="space-y-2 col-span-full">
+                    <label className="text-sm font-medium">Main channels</label>
+                    <Input
+                      value={businessFields.mainChannels}
+                      onChange={(e) =>
+                        setBusinessFields({ ...businessFields, mainChannels: e.target.value })
+                      }
+                      placeholder="How do you reach customers?"
+                    />
+                  </div>
+                </div>
+                <Button onClick={handleSubmitBusinessFields} className="w-full md:w-auto">
+                  Submit Business Details
                 </Button>
               </div>
+            ) : (
+              <>
+                {messages.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <h1 className="text-4xl font-bold mb-8 animate-fade-in text-[#0f172a]">
+                      What can I help with?
+                    </h1>
+                  </div>
+                ) : (
+                  <div className="flex-1 space-y-4 mb-6 overflow-y-auto">
+                    {messages.map((msg, index) => (
+                      <div
+                        key={index}
+                        className={cn(
+                          "p-4 rounded-lg max-w-[80%] animate-fade-in",
+                          msg.isUser
+                            ? "ml-auto bg-[#0f172a] text-white w-fit animate-slide-in-right"
+                            : "bg-muted w-fit"
+                        )}
+                      >
+                        {msg.isUser ? (
+                          msg.text
+                        ) : (
+                          <div
+                            dangerouslySetInnerHTML={{
+                              __html: formatModelResponse(msg.text),
+                            }}
+                          />
+                        )}
+                      </div>
+                    ))}
+                    {isTyping && (
+                      <div className="typing-animation p-4 rounded-lg bg-muted inline-block">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-              {showSuggestions && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 animate-fade-in">
-                  <ActionButton label="Analyze my Market" />
-                  <ActionButton label="Review Business Plan" />
-                  <ActionButton label="Financial Insights" />
-                  <ActionButton label="Risk Assesment" />
-                  <ActionButton label="Growth Startegy" />
-                  <ActionButton label="Competitor Analysis" />
+                <div className="space-y-6">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Message B.O.T"
+                      className="w-full h-12 text-lg outline-none ring-0"
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                    />
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      className="hidden"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                    />
+                    <Button
+                      onClick={() => fileInputRef.current?.click()}
+                      variant="outline"
+                      className="h-12 px-4"
+                    >
+                      <FileUp className="w-5 h-5" />
+                    </Button>
+                    <Button
+                      onClick={handleSendMessage}
+                      className="h-12 px-4 bg-[#0f172a] text-white"
+                      disabled={!message.trim()}
+                    >
+                      <Send className="w-5 h-5" />
+                    </Button>
+                  </div>
+
+                  {pdfUploaded && (
+                    <div className="text-sm text-muted-foreground">
+                      PDF uploaded: {pdfName}
+                    </div>
+                  )}
+
+                  {showSuggestions && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 animate-fade-in">
+                      <ActionButton label="Analyze my Market" />
+                      <ActionButton label="Review Business Plan" />
+                      <ActionButton label="Financial Insights" />
+                      <ActionButton label="Risk Assessment" />
+                      <ActionButton label="Growth Strategy" />
+                      <ActionButton label="Competitor Analysis" />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
 
           <footer className="text-center text-sm text-muted-foreground mt-6">
