@@ -1,4 +1,3 @@
-
 import { Globe, Lightbulb, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ActionButton } from "@/components/ActionButton";
@@ -20,27 +19,42 @@ const Index = () => {
   const [message, setMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
-  const [messages, setMessages] = useState<Array<{ text: string; isUser: boolean }>>([]);
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<
+    Array<{ text: string; isUser: boolean }>
+  >([]);
+  const [currentConversationId, setCurrentConversationId] = useState<
+    string | null
+  >(null);
   const { toast } = useToast();
 
-  const saveConversation = (messages: Array<{ text: string; isUser: boolean }>) => {
-    const conversations = JSON.parse(localStorage.getItem("conversations") || "[]");
-    const firstUserMessage = messages.find(m => m.isUser)?.text || "New Conversation";
-    
+  const saveConversation = (
+    messages: Array<{ text: string; isUser: boolean }>
+  ) => {
+    const conversations = JSON.parse(
+      localStorage.getItem("conversations") || "[]"
+    );
+    const firstUserMessage =
+      messages.find((m) => m.isUser)?.text || "New Conversation";
+
     if (!currentConversationId) {
       const newConversation: Conversation = {
         id: Date.now().toString(),
         title: firstUserMessage,
-        messages
+        messages,
       };
-      localStorage.setItem("conversations", JSON.stringify([newConversation, ...conversations]));
+      localStorage.setItem(
+        "conversations",
+        JSON.stringify([newConversation, ...conversations])
+      );
       setCurrentConversationId(newConversation.id);
     } else {
-      const updatedConversations = conversations.map((conv: Conversation) => 
+      const updatedConversations = conversations.map((conv: Conversation) =>
         conv.id === currentConversationId ? { ...conv, messages } : conv
       );
-      localStorage.setItem("conversations", JSON.stringify(updatedConversations));
+      localStorage.setItem(
+        "conversations",
+        JSON.stringify(updatedConversations)
+      );
     }
   };
 
@@ -65,10 +79,13 @@ const Index = () => {
     setIsTyping(true);
     setTimeout(() => {
       setIsTyping(false);
-      const updatedMessages = [...newMessages, { 
-        text: "This is a sample response. In a real application, this would be the AI's response.", 
-        isUser: false 
-      }];
+      const updatedMessages = [
+        ...newMessages,
+        {
+          text: "This is a sample response. In a real application, this would be the AI's response.",
+          isUser: false,
+        },
+      ];
       setMessages(updatedMessages);
       saveConversation(updatedMessages);
     }, 2000);
@@ -93,7 +110,7 @@ const Index = () => {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
-        <AppSidebar 
+        <AppSidebar
           onConversationSelect={handleConversationSelect}
           onNewConversation={handleNewConversation}
         />
@@ -101,7 +118,7 @@ const Index = () => {
           <div className="flex justify-end mb-6">
             <UserAvatar />
           </div>
-          
+
           <div className="flex-1 flex flex-col">
             {messages.length === 0 ? (
               <div className="flex-1 flex items-center justify-center">
@@ -116,9 +133,9 @@ const Index = () => {
                     key={index}
                     className={cn(
                       "p-4 rounded-lg max-w-[80%] animate-fade-in",
-                      msg.isUser ? 
-                        "ml-auto bg-[#0f172a] text-white animate-slide-in-right" : 
-                        "bg-muted"
+                      msg.isUser
+                        ? "ml-auto bg-[#0f172a] text-white w-fit animate-slide-in-right"
+                        : "bg-muted w-fit"
                     )}
                   >
                     {msg.text}
@@ -133,12 +150,12 @@ const Index = () => {
                 )}
               </div>
             )}
-            
+
             <div className="space-y-6">
               <div className="flex gap-2">
                 <Input
-                  placeholder="Message ChatGPT"
-                  className="w-full h-12 text-lg"
+                  placeholder="Message B.O.T"
+                  className="w-full h-12 text-lg outline-none ring-0"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyPress={handleKeyPress}
@@ -151,23 +168,22 @@ const Index = () => {
                   <Send className="w-5 h-5" />
                 </Button>
               </div>
-              
+
               {showSuggestions && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
-                  <ActionButton icon={Globe} label="Search" />
-                  <ActionButton icon={Lightbulb} label="Reason" />
-                  <ActionButton label="Create Image" />
-                  <ActionButton label="Surprise Me" />
-                  <ActionButton label="Analyze Images" />
-                  <ActionButton label="Code" />
-                  <ActionButton label="Make a Plan" />
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 animate-fade-in">
+                  <ActionButton label="Analyze my Market" />
+                  <ActionButton label="Review Business Plan" />
+                  <ActionButton label="Financial Insights" />
+                  <ActionButton label="Risk Assesment" />
+                  <ActionButton label="Growth Startegy" />
+                  <ActionButton label="Competitor Analysis" />
                 </div>
               )}
             </div>
           </div>
-          
+
           <footer className="text-center text-sm text-muted-foreground mt-6">
-            ChatGPT can make mistakes. Check important info.
+            B.O.T can make mistakes. Check important info.
           </footer>
         </main>
       </div>
